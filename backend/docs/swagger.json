@@ -1,0 +1,475 @@
+{
+    "schemes": [
+        "http",
+        "https"
+    ],
+    "swagger": "2.0",
+    "info": {
+        "description": "1Panel 新版 WebUI 的后端服务（BFF）。浏览器只与本服务通信，由服务端持有面板凭据、\n加密登录密码、维护会话并按需聚合转发 1Panel 接口。\n统一响应信封为 {\"code\": \u003cHTTP 状态码\u003e, \"message\": \"\", \"data\": {}}。",
+        "title": "oh-my-1panel API",
+        "contact": {},
+        "version": "0.1.0"
+    },
+    "basePath": "/api/v1",
+    "paths": {
+        "/auth/captcha": {
+            "get": {
+                "description": "面板在登录失败次数过多或开启图形校验时要求验证码，返回值中的 imagePath 可直接用于 \u003cimg src\u003e。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "获取登录验证码",
+                "responses": {
+                    "200": {
+                        "description": "验证码",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/dto.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.CaptchaResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "502": {
+                        "description": "面板不可达",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/login": {
+            "post": {
+                "description": "使用 1Panel 面板账号密码登录。密码在服务端按面板约定（RSA + AES 混合加密）加密后转发，浏览器不接触面板凭据。\n面板开启 MFA 时返回 mfaRequired=true 与 mfaSession，需继续调用 /auth/mfa 完成登录。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "用户登录",
+                "parameters": [
+                    {
+                        "description": "登录请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.LoginRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "登录结果",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/dto.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.LoginResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "账号密码错误、验证码错误或安全入口错误",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
+                    },
+                    "502": {
+                        "description": "面板不可达",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/logout": {
+            "post": {
+                "description": "注销面板会话并清除本地会话 Cookie。需要携带 X-CSRF-Token。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "退出登录",
+                "responses": {
+                    "200": {
+                        "description": "退出成功",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "未登录",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "CSRF 令牌校验失败",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/mfa": {
+            "post": {
+                "description": "携带登录返回的 mfaSession 与 6 位动态验证码完成登录。验证码错误时中间会话保留，可直接重试。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "动态验证码校验",
+                "parameters": [
+                    {
+                        "description": "动态验证码请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.MFARequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "登录结果",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/dto.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.LoginResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "验证码错误或中间会话已过期",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
+                    },
+                    "502": {
+                        "description": "面板不可达",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/system/current": {
+            "get": {
+                "description": "透传面板 GET /core/auth/current，返回角色、权限与认证来源；面板会话失效时返回 401 并销毁本地会话。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "System"
+                ],
+                "summary": "当前登录用户",
+                "responses": {
+                    "200": {
+                        "description": "当前用户",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/dto.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.CurrentUser"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "未登录或面板会话已过期",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
+                    },
+                    "502": {
+                        "description": "面板不可达",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/system/info": {
+            "get": {
+                "description": "登录页与首屏路由守卫使用：返回面板名称、主题、语言、是否需要验证码；携带有效会话 Cookie 时同时返回当前用户。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "System"
+                ],
+                "summary": "面板信息与登录态",
+                "responses": {
+                    "200": {
+                        "description": "面板信息",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/dto.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.SystemInfo"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "502": {
+                        "description": "面板不可达",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "dto.CaptchaResponse": {
+            "type": "object",
+            "properties": {
+                "captchaID": {
+                    "type": "string",
+                    "example": "Wk3kQz1s"
+                },
+                "imagePath": {
+                    "type": "string",
+                    "example": "data:image/png;base64,iVBORw0KGgo="
+                }
+            }
+        },
+        "dto.CurrentUser": {
+            "type": "object",
+            "properties": {
+                "authSource": {
+                    "type": "string",
+                    "example": "local"
+                },
+                "isAdmin": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "mfaStatus": {
+                    "type": "string",
+                    "example": "Disable"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "admin"
+                },
+                "permissions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "role": {
+                    "type": "string",
+                    "example": "ADMIN"
+                }
+            }
+        },
+        "dto.LoginRequest": {
+            "type": "object",
+            "required": [
+                "name",
+                "password"
+            ],
+            "properties": {
+                "captcha": {
+                    "type": "string",
+                    "example": "42"
+                },
+                "captchaID": {
+                    "type": "string",
+                    "example": "Wk3kQz1s"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "admin"
+                },
+                "password": {
+                    "type": "string",
+                    "example": "1panel123456"
+                }
+            }
+        },
+        "dto.LoginResponse": {
+            "type": "object",
+            "properties": {
+                "expiresAt": {
+                    "type": "string",
+                    "example": "2026-09-21T18:30:00+08:00"
+                },
+                "mfaRequired": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "mfaSession": {
+                    "type": "string",
+                    "example": "bE1lSP2rq3Zg"
+                },
+                "user": {
+                    "$ref": "#/definitions/dto.UserInfo"
+                }
+            }
+        },
+        "dto.MFARequest": {
+            "type": "object",
+            "required": [
+                "code",
+                "sessionId"
+            ],
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "example": "123456"
+                },
+                "sessionId": {
+                    "type": "string",
+                    "example": "bE1lSP2rq3Zg"
+                }
+            }
+        },
+        "dto.Response": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {},
+                "detail": {
+                    "type": "string",
+                    "example": "ErrCaptchaCode"
+                },
+                "message": {
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "dto.SystemInfo": {
+            "type": "object",
+            "properties": {
+                "language": {
+                    "type": "string",
+                    "example": "zh"
+                },
+                "logged": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "needCaptcha": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "panelName": {
+                    "type": "string",
+                    "example": "1Panel"
+                },
+                "panelURL": {
+                    "type": "string",
+                    "example": "http://192.168.139.151:1314"
+                },
+                "theme": {
+                    "type": "string",
+                    "example": "dark"
+                },
+                "user": {
+                    "$ref": "#/definitions/dto.UserInfo"
+                },
+                "version": {
+                    "type": "string",
+                    "example": "0.1.0"
+                }
+            }
+        },
+        "dto.UserInfo": {
+            "type": "object",
+            "properties": {
+                "isAdmin": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "name": {
+                    "type": "string",
+                    "example": "admin"
+                },
+                "role": {
+                    "type": "string",
+                    "example": "ADMIN"
+                }
+            }
+        }
+    }
+}

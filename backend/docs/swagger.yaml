@@ -1,0 +1,312 @@
+basePath: /api/v1
+definitions:
+  dto.CaptchaResponse:
+    properties:
+      captchaID:
+        example: Wk3kQz1s
+        type: string
+      imagePath:
+        example: data:image/png;base64,iVBORw0KGgo=
+        type: string
+    type: object
+  dto.CurrentUser:
+    properties:
+      authSource:
+        example: local
+        type: string
+      isAdmin:
+        example: true
+        type: boolean
+      mfaStatus:
+        example: Disable
+        type: string
+      name:
+        example: admin
+        type: string
+      permissions:
+        items:
+          type: string
+        type: array
+      role:
+        example: ADMIN
+        type: string
+    type: object
+  dto.LoginRequest:
+    properties:
+      captcha:
+        example: "42"
+        type: string
+      captchaID:
+        example: Wk3kQz1s
+        type: string
+      name:
+        example: admin
+        type: string
+      password:
+        example: 1panel123456
+        type: string
+    required:
+    - name
+    - password
+    type: object
+  dto.LoginResponse:
+    properties:
+      expiresAt:
+        example: "2026-09-21T18:30:00+08:00"
+        type: string
+      mfaRequired:
+        example: false
+        type: boolean
+      mfaSession:
+        example: bE1lSP2rq3Zg
+        type: string
+      user:
+        $ref: '#/definitions/dto.UserInfo'
+    type: object
+  dto.MFARequest:
+    properties:
+      code:
+        example: "123456"
+        type: string
+      sessionId:
+        example: bE1lSP2rq3Zg
+        type: string
+    required:
+    - code
+    - sessionId
+    type: object
+  dto.Response:
+    properties:
+      code:
+        example: 200
+        type: integer
+      data: {}
+      detail:
+        example: ErrCaptchaCode
+        type: string
+      message:
+        example: ""
+        type: string
+    type: object
+  dto.SystemInfo:
+    properties:
+      language:
+        example: zh
+        type: string
+      logged:
+        example: false
+        type: boolean
+      needCaptcha:
+        example: false
+        type: boolean
+      panelName:
+        example: 1Panel
+        type: string
+      panelURL:
+        example: http://192.168.139.151:1314
+        type: string
+      theme:
+        example: dark
+        type: string
+      user:
+        $ref: '#/definitions/dto.UserInfo'
+      version:
+        example: 0.1.0
+        type: string
+    type: object
+  dto.UserInfo:
+    properties:
+      isAdmin:
+        example: true
+        type: boolean
+      name:
+        example: admin
+        type: string
+      role:
+        example: ADMIN
+        type: string
+    type: object
+info:
+  contact: {}
+  description: |-
+    1Panel 新版 WebUI 的后端服务（BFF）。浏览器只与本服务通信，由服务端持有面板凭据、
+    加密登录密码、维护会话并按需聚合转发 1Panel 接口。
+    统一响应信封为 {"code": <HTTP 状态码>, "message": "", "data": {}}。
+  title: oh-my-1panel API
+  version: 0.1.0
+paths:
+  /auth/captcha:
+    get:
+      description: 面板在登录失败次数过多或开启图形校验时要求验证码，返回值中的 imagePath 可直接用于 <img src>。
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 验证码
+          schema:
+            allOf:
+            - $ref: '#/definitions/dto.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.CaptchaResponse'
+              type: object
+        "502":
+          description: 面板不可达
+          schema:
+            $ref: '#/definitions/dto.Response'
+      summary: 获取登录验证码
+      tags:
+      - Auth
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        使用 1Panel 面板账号密码登录。密码在服务端按面板约定（RSA + AES 混合加密）加密后转发，浏览器不接触面板凭据。
+        面板开启 MFA 时返回 mfaRequired=true 与 mfaSession，需继续调用 /auth/mfa 完成登录。
+      parameters:
+      - description: 登录请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 登录结果
+          schema:
+            allOf:
+            - $ref: '#/definitions/dto.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.LoginResponse'
+              type: object
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/dto.Response'
+        "401":
+          description: 账号密码错误、验证码错误或安全入口错误
+          schema:
+            $ref: '#/definitions/dto.Response'
+        "502":
+          description: 面板不可达
+          schema:
+            $ref: '#/definitions/dto.Response'
+      summary: 用户登录
+      tags:
+      - Auth
+  /auth/logout:
+    post:
+      description: 注销面板会话并清除本地会话 Cookie。需要携带 X-CSRF-Token。
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 退出成功
+          schema:
+            $ref: '#/definitions/dto.Response'
+        "401":
+          description: 未登录
+          schema:
+            $ref: '#/definitions/dto.Response'
+        "403":
+          description: CSRF 令牌校验失败
+          schema:
+            $ref: '#/definitions/dto.Response'
+      summary: 退出登录
+      tags:
+      - Auth
+  /auth/mfa:
+    post:
+      consumes:
+      - application/json
+      description: 携带登录返回的 mfaSession 与 6 位动态验证码完成登录。验证码错误时中间会话保留，可直接重试。
+      parameters:
+      - description: 动态验证码请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.MFARequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 登录结果
+          schema:
+            allOf:
+            - $ref: '#/definitions/dto.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.LoginResponse'
+              type: object
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/dto.Response'
+        "401":
+          description: 验证码错误或中间会话已过期
+          schema:
+            $ref: '#/definitions/dto.Response'
+        "502":
+          description: 面板不可达
+          schema:
+            $ref: '#/definitions/dto.Response'
+      summary: 动态验证码校验
+      tags:
+      - Auth
+  /system/current:
+    get:
+      description: 透传面板 GET /core/auth/current，返回角色、权限与认证来源；面板会话失效时返回 401 并销毁本地会话。
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 当前用户
+          schema:
+            allOf:
+            - $ref: '#/definitions/dto.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.CurrentUser'
+              type: object
+        "401":
+          description: 未登录或面板会话已过期
+          schema:
+            $ref: '#/definitions/dto.Response'
+        "502":
+          description: 面板不可达
+          schema:
+            $ref: '#/definitions/dto.Response'
+      summary: 当前登录用户
+      tags:
+      - System
+  /system/info:
+    get:
+      description: 登录页与首屏路由守卫使用：返回面板名称、主题、语言、是否需要验证码；携带有效会话 Cookie 时同时返回当前用户。
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 面板信息
+          schema:
+            allOf:
+            - $ref: '#/definitions/dto.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.SystemInfo'
+              type: object
+        "502":
+          description: 面板不可达
+          schema:
+            $ref: '#/definitions/dto.Response'
+      summary: 面板信息与登录态
+      tags:
+      - System
+schemes:
+- http
+- https
+swagger: "2.0"
