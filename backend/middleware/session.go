@@ -46,9 +46,16 @@ func CSRFTokenGuard() gin.HandlerFunc {
 			return
 		}
 		current := helper.CurrentSession(c)
+		// 浏览器还带着会话 Cookie，但服务端已无对应会话（服务重启或会话过期）：
+		// 这是会话失效而非 CSRF 问题，按未登录处理并清掉残留 Cookie。
+		if current == nil {
+			helper.ClearSessionCookies(c)
+			helper.Unauthorized(c, "会话已过期，请重新登录！")
+			c.Abort()
+			return
+		}
 		token := strings.TrimSpace(c.GetHeader(constant.CSRFHeaderName))
-		if current == nil || token == "" ||
-			subtle.ConstantTimeCompare([]byte(token), []byte(current.CSRFToken)) != 1 {
+		if token == "" || subtle.ConstantTimeCompare([]byte(token), []byte(current.CSRFToken)) != 1 {
 			helper.Forbidden(c, "CSRF 令牌校验失败，请刷新页面后重试！")
 			c.Abort()
 			return

@@ -2,6 +2,7 @@ import type { AxiosRequestConfig } from 'axios'
 import type { Envelope } from './types'
 import axios from 'axios'
 import { appBase } from '@/lib/app-base'
+import { useSystemStore } from '@/stores/system'
 
 /** 后端会话 Cookie 名与 CSRF 头，需与 backend/constant 保持一致。 */
 const CSRF_COOKIE = 'omopcsrftoken'
@@ -43,6 +44,10 @@ http.interceptors.response.use(
     const envelope = error?.response?.data as Partial<Envelope<unknown>> | undefined
     const status = error?.response?.status ?? 0
     const message = envelope?.message || error?.message || '请求失败，请稍后重试！'
+    // 会话在任何接口上失效时同步清空登录态，让首页回到登录表单
+    if (status === 401 && !String(error?.config?.url ?? '').startsWith('/auth/')) {
+      void useSystemStore().clear()
+    }
     return Promise.reject(new ApiError(message, status, envelope?.detail ?? ''))
   },
 )

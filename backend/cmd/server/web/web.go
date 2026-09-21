@@ -1,7 +1,6 @@
 package web
 
 import (
-	_ "embed"
 	"fmt"
 	"net/http"
 	"os"
@@ -14,23 +13,16 @@ import (
 	"github.com/ChishFoxcat/oh-my-1panel/backend/global"
 )
 
-// entranceUnavailable 是入口外请求返回的页面，与 1Panel 面板在未输入安全入口时
-// 返回的页面逐字节一致（取自面板自身），用于隐藏本服务与面板的区别。
-//
-//go:embed html/entrance_unavailable.html
-var entranceUnavailable []byte
-
 // Register 托管前端构建产物。
 //
-// prefix 是安全入口路径前缀（如 /chish，未启用入口时为空串）：
-//   - 入口路径内：按文件系统提供静态资源，未命中文件时回退到注入 <base> 的 index.html；
-//   - 入口路径外：返回与面板一致的中性页面，不暴露本服务的存在与形态。
-func Register(engine *gin.Engine, prefix string) {
+// 资源与接口都在根路径提供（前端产物按根路径构建），安全入口只作为进入凭证：
+// 门禁由 middleware.Entrance 负责，这里只决定"入口内/根路径下要返回什么"。
+func Register(engine *gin.Engine, entrance string) {
 	dir := global.CONF.WebDir
 	// 中间件必须先于静态路由注册，否则不会进入该路由的处理链
 	engine.Use(cacheControl("/assets/", "public, max-age=2628000, immutable"))
 	if info, err := os.Stat(filepath.Join(dir, "assets")); err == nil && info.IsDir() {
-		engine.Static(prefix+"/assets", filepath.Join(dir, "assets"))
+		engine.Static("/assets", filepath.Join(dir, "assets"))
 	}
 
 	indexPath := filepath.Join(dir, "index.html")
@@ -39,21 +31,22 @@ func Register(engine *gin.Engine, prefix string) {
 		global.LOGGER.Warn("未找到前端产物，仅提供接口与文档服务",
 			"dir", dir, "hint", "在 frontend 目录执行 npm run build，或用 OMOP_WEB_DIR 指定产物目录")
 	} else {
-		global.LOGGER.Info("前端产物托管", "dir", dir, "entrance", prefix)
+		global.LOGGER.Info("前端产物托管", "dir", dir, "entrance", entrance)
+	}
+
+	prefix := ""
+	if entrance != "" {
+		prefix = "/" + entrance
 	}
 
 	engine.NoRoute(func(c *gin.Context) {
-		relative, inside := relativePath(c.Request.URL.Path, prefix)
-		if !inside {
-			c.Data(http.StatusOK, "text/html; charset=utf-8", entranceUnavailable)
-			return
-		}
+		relative, _ := stripEntrance(c.Request.URL.Path, prefix)
 		if isReservedPath(relative) {
 			apiNotFound(c)
 			return
 		}
 		if indexErr != nil {
-			blocked(c)
+			notFound(c)
 			return
 		}
 		if file, found := lookup(dir, relative); found {
@@ -62,14 +55,14 @@ func Register(engine *gin.Engine, prefix string) {
 		}
 		// 静态资源缺失时不要回退到 SPA 页面，避免 404 变成 200
 		if isStaticAsset(relative) {
-			blocked(c)
+			notFound(c)
 			return
 		}
 		// index.html 每次读取：构建产物更新后无需重启服务
 		page, err := renderIndex(indexPath, prefix)
 		if err != nil {
 			global.LOGGER.Error("渲染 index.html 失败", "error", err)
-			blocked(c)
+			notFound(c)
 			return
 		}
 		c.Header("Cache-Control", "no-cache")
@@ -77,25 +70,8 @@ func Register(engine *gin.Engine, prefix string) {
 	})
 }
 
-// renderIndex 读取 index.html 并注入 <base href>，使前端产物的相对资源路径
-// 与前端路由挂载点和当前安全入口一致（入口可变而无需重新构建）。
-func renderIndex(path, prefix string) ([]byte, error) {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("读取 index.html 失败：%w", err)
-	}
-	content := string(raw)
-	const head = "<head>"
-	if at := strings.Index(strings.ToLower(content), head); at >= 0 {
-		insertAt := at + len(head)
-		tag := fmt.Sprintf("\n    <base href=\"%s/\">", prefix)
-		content = content[:insertAt] + tag + content[insertAt:]
-	}
-	return []byte(content), nil
-}
-
-// relativePath 判断请求路径是否位于入口内，并返回去掉入口前缀的相对路径。
-func relativePath(path, prefix string) (string, bool) {
+// stripEntrance 去掉安全入口路径前缀，返回应用自身路径；第二个返回值表示请求是否位于入口内。
+func stripEntrance(path, prefix string) (string, bool) {
 	if prefix == "" {
 		return path, true
 	}
@@ -105,13 +81,33 @@ func relativePath(path, prefix string) (string, bool) {
 	if strings.HasPrefix(path, prefix+"/") {
 		return strings.TrimPrefix(path, prefix), true
 	}
-	return "", false
+	return path, false
 }
 
-func isReservedPath(relative string) bool {
-	return relative == constant.APIPrefix ||
-		strings.HasPrefix(relative, constant.APIPrefix+"/") ||
-		strings.HasPrefix(relative, "/swagger")
+// renderIndex 读取 index.html 并注入运行期配置：
+//   - <base href="/"> 让相对资源路径始终相对站点根解析（安全入口路径下也成立）；
+//   - <meta name="omop-entrance"> 告知前端安全入口挂载点，供路由与"登录后去掉入口"使用。
+//
+// 入口可变，因此这里每次请求都重新渲染，不缓存。
+func renderIndex(path, prefix string) ([]byte, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("读取 index.html 失败：%w", err)
+	}
+	content := string(raw)
+	const head = "<head>"
+	if at := strings.Index(strings.ToLower(content), head); at >= 0 {
+		insertAt := at + len(head)
+		tags := fmt.Sprintf("\n    <base href=\"/\">\n    <meta name=\"omop-entrance\" content=\"%s\">", prefix)
+		content = content[:insertAt] + tags + content[insertAt:]
+	}
+	return []byte(content), nil
+}
+
+func isReservedPath(path string) bool {
+	return path == constant.APIPrefix ||
+		strings.HasPrefix(path, constant.APIPrefix+"/") ||
+		strings.HasPrefix(path, "/swagger")
 }
 
 // staticExtensions 参与静态资源判定的扩展名，用于把"文件缺失"与"前端路由"区分开。
@@ -148,8 +144,7 @@ func cacheControl(fragment, value string) gin.HandlerFunc {
 	}
 }
 
-// blocked 对入口外的请求返回中性 404，不泄露任何服务特征。
-func blocked(c *gin.Context) {
+func notFound(c *gin.Context) {
 	http.NotFound(c.Writer, c.Request)
 }
 

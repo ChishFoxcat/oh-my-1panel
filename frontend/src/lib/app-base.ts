@@ -1,7 +1,6 @@
 /**
- * 应用基址：由后端注入的 <base href> 决定。
- * 启用安全入口时后端会写 <base href="/入口/">，此时前端资源与接口都落在入口路径之下；
- * 开发服务器不注入该标签，基址回落为 /。
+ * 应用资源基址：由后端注入的 <base href> 决定，固定为 /。
+ * 前端产物按站点根路径构建，安全入口不参与资源与接口路径。
  */
 export function appBase(): string {
   const href = document.querySelector('base')?.getAttribute('href') ?? '/'
@@ -9,13 +8,12 @@ export function appBase(): string {
 }
 
 /**
- * 路由挂载前缀（不带结尾斜杠），例如 /chish；未启用安全入口时为空串。
+ * 安全入口挂载点（如 /chish），未启用入口时为空串。
  *
- * 安全入口由路由路径承载、而不是交给 vue-router 的 history base：
- * vue-router 会把 base 规范化成不带尾斜杠的形式，并在位于 base 根时把地址写成
- * base + '/'，于是访问 /chish 会被改成 /chish/。用空 base + 带前缀的路由路径
- * 才能让地址栏保持原样。
+ * 入口只作为"进入凭证"：访问该路径会拿到 base64(入口) 的 Cookie，登录后地址栏不再带它。
+ * 路由需要把该路径也登记为首页，避免被兜底路由重定向掉。
  */
-export function routeMount(): string {
-  return appBase().replace(/\/$/, '')
+export function entranceMount(): string {
+  const value = document.querySelector('meta[name="omop-entrance"]')?.getAttribute('content') ?? ''
+  return value.replace(/\/$/, '')
 }

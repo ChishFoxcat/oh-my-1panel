@@ -14,19 +14,18 @@ import (
 
 // InitRouter 组装 HTTP 路由。
 //
-// 启用安全入口（OMOP_ENTRANCE）时，接口、Swagger 与前端产物统一挂在 /{入口} 之下，
-// 入口以外的请求由 web.Register 注册的 NoRoute 拦掉。
+// 安全入口（OMOP_ENTRANCE）只作为进入凭证，不改变接口与资源的路径：
+// middleware.Entrance 负责下发与校验入口 Cookie，并把未授权请求挡在门外。
 func InitRouter() *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
 	engine.Use(gin.Recovery())
+	engine.Use(middleware.Entrance(global.CONF.Entrance))
 	engine.Use(middleware.Logger())
 	engine.Use(middleware.SessionLoader())
 	engine.Use(middleware.CSRFTokenGuard())
 
-	prefix := global.CONF.WebPrefix()
-
-	api := engine.Group(prefix + constant.APIPrefix)
+	api := engine.Group(constant.APIPrefix)
 	system := api.Group("/system")
 	{
 		system.GET("/info", v1.SystemInfo)
@@ -41,7 +40,7 @@ func InitRouter() *gin.Engine {
 		auth.POST("/logout", middleware.RequireSession(), v1.Logout)
 	}
 
-	engine.GET(prefix+"/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-	web.Register(engine, prefix)
+	engine.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	web.Register(engine, global.CONF.Entrance)
 	return engine
 }

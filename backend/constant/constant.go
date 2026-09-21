@@ -5,6 +5,8 @@ const (
 	SessionName = "omopsession"
 	// CSRFTokenName 浏览器可读的 CSRF Cookie 名称
 	CSRFTokenName = "omopcsrftoken"
+	// EntranceCookieName 安全入口凭证 Cookie 名称（HttpOnly，值为 base64(安全入口)）
+	EntranceCookieName = "omopentrance"
 	// CSRFHeaderName 非安全方法必须携带的 CSRF 头
 	CSRFHeaderName = "X-CSRF-Token"
 	// SessionContextKey 会话在 gin 上下文中的键
