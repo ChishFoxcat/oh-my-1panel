@@ -2,7 +2,6 @@
 import type { CaptchaResponse, LoginResponse } from '@/api/types'
 import { ArrowLeftIcon, EyeIcon, EyeOffIcon, KeyRoundIcon, MoonIcon, SunIcon, UserIcon } from '@lucide/vue'
 import { computed, onMounted, reactive, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { ApiError } from '@/api/request'
 import { fetchCaptcha, login, loginWithMFA } from '@/api/auth'
@@ -45,8 +44,6 @@ import { useThemeStore } from '@/stores/theme'
 
 const otpLength = 6
 
-const router = useRouter()
-const route = useRoute()
 const system = useSystemStore()
 const theme = useThemeStore()
 
@@ -60,11 +57,6 @@ const errorMessage = ref('')
 
 const form = reactive({ name: '', password: '', captcha: '' })
 const mfa = reactive({ sessionId: '', code: '' })
-
-const redirectTo = computed(() => {
-  const target = route.query.redirect
-  return typeof target === 'string' && target.startsWith('/') ? target : '/'
-})
 
 const canSubmit = computed(() => form.name.trim().length > 0 && form.password.length > 0)
 
@@ -147,10 +139,9 @@ async function submitMFA() {
 async function finishLogin(result: LoginResponse) {
   form.password = ''
   mfa.code = ''
-  // 先刷新登录态，否则路由守卫会把跳转弹回登录页
+  // 刷新登录态即可：首页会由登录表单切换为概览，URL 始终停在安全入口
   await system.markLoggedIn(result)
   toast.success('登录成功')
-  await router.replace(redirectTo.value)
 }
 
 /** 密码错误与验证码错误时按面板语义刷新验证码输入。 */

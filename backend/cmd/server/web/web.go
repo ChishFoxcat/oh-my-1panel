@@ -1,6 +1,7 @@
 package web
 
 import (
+	_ "embed"
 	"fmt"
 	"net/http"
 	"os"
@@ -13,11 +14,17 @@ import (
 	"github.com/ChishFoxcat/oh-my-1panel/backend/global"
 )
 
+// entranceUnavailable 是入口外请求返回的页面，与 1Panel 面板在未输入安全入口时
+// 返回的页面逐字节一致（取自面板自身），用于隐藏本服务与面板的区别。
+//
+//go:embed html/entrance_unavailable.html
+var entranceUnavailable []byte
+
 // Register 托管前端构建产物。
 //
 // prefix 是安全入口路径前缀（如 /chish，未启用入口时为空串）：
 //   - 入口路径内：按文件系统提供静态资源，未命中文件时回退到注入 <base> 的 index.html；
-//   - 入口路径外：一律返回中性 404，不暴露本服务的存在与形态。
+//   - 入口路径外：返回与面板一致的中性页面，不暴露本服务的存在与形态。
 func Register(engine *gin.Engine, prefix string) {
 	dir := global.CONF.WebDir
 	// 中间件必须先于静态路由注册，否则不会进入该路由的处理链
@@ -36,7 +43,7 @@ func Register(engine *gin.Engine, prefix string) {
 	engine.NoRoute(func(c *gin.Context) {
 		relative, inside := relativePath(c.Request.URL.Path, prefix)
 		if !inside {
-			blocked(c)
+			c.Data(http.StatusOK, "text/html; charset=utf-8", entranceUnavailable)
 			return
 		}
 		if isReservedPath(relative) {

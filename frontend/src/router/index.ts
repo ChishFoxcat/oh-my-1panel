@@ -6,15 +6,9 @@ const router = createRouter({
   history: createWebHistory(appBase()),
   routes: [
     {
-      path: '/login',
-      name: 'login',
-      component: () => import('@/views/login/index.vue'),
-      meta: { public: true },
-    },
-    {
       path: '/',
-      name: 'overview',
-      component: () => import('@/views/overview/index.vue'),
+      name: 'home',
+      component: () => import('@/views/home/index.vue'),
     },
     {
       path: '/:pathMatch(.*)*',
@@ -23,22 +17,17 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach(async (to) => {
+// 进入首页前先取回面板信息与登录态，避免已登录时闪出登录表单。
+// 面板不可达时不阻塞渲染，由登录表单展示具体错误。
+router.beforeEach(async () => {
   const system = useSystemStore()
   if (!system.info) {
     try {
       await system.refresh()
     }
     catch {
-      // 面板不可达时仍进入登录页，由登录页展示具体错误
-      return to.meta.public ? true : { name: 'login' }
+      // 忽略：错误状态已写入 system.error
     }
-  }
-  if (!to.meta.public && !system.logged) {
-    return { name: 'login' }
-  }
-  if (to.name === 'login' && system.logged) {
-    return { name: 'overview' }
   }
   return true
 })

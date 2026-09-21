@@ -2,7 +2,6 @@
 import { LogOutIcon, MoonIcon, ShieldCheckIcon, SunIcon } from '@lucide/vue'
 import { onMounted, ref } from 'vue'
 import { toast } from 'vue-sonner'
-import { useRouter } from 'vue-router'
 import { fetchCurrentUser, logout } from '@/api/auth'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -19,7 +18,6 @@ import { Spinner } from '@/components/ui/spinner'
 import { useSystemStore } from '@/stores/system'
 import { useThemeStore } from '@/stores/theme'
 
-const router = useRouter()
 const system = useSystemStore()
 const theme = useThemeStore()
 
@@ -45,7 +43,6 @@ async function handleLogout() {
     await logout()
     system.clear()
     toast.success('已退出登录')
-    await router.replace({ name: 'login' })
   }
   catch (thrown) {
     toast.error(thrown instanceof Error ? thrown.message : '退出登录失败')
