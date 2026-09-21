@@ -33,12 +33,14 @@ func Register(engine *gin.Engine, prefix string) {
 		engine.Static(prefix+"/assets", filepath.Join(dir, "assets"))
 	}
 
-	index, err := buildIndex(dir, prefix)
-	if err != nil {
+	indexPath := filepath.Join(dir, "index.html")
+	_, indexErr := os.Stat(indexPath)
+	if indexErr != nil {
 		global.LOGGER.Warn("未找到前端产物，仅提供接口与文档服务",
 			"dir", dir, "hint", "在 frontend 目录执行 npm run build，或用 OMOP_WEB_DIR 指定产物目录")
+	} else {
+		global.LOGGER.Info("前端产物托管", "dir", dir, "entrance", prefix)
 	}
-	global.LOGGER.Info("前端产物托管", "dir", dir, "entrance", prefix, "mounted", err == nil)
 
 	engine.NoRoute(func(c *gin.Context) {
 		relative, inside := relativePath(c.Request.URL.Path, prefix)
@@ -50,28 +52,35 @@ func Register(engine *gin.Engine, prefix string) {
 			apiNotFound(c)
 			return
 		}
-		if index != nil {
-			if file, found := lookup(dir, relative); found {
-				c.File(file)
-				return
-			}
-			// 静态资源缺失时不要回退到 SPA 页面，避免 404 变成 200
-			if isStaticAsset(relative) {
-				blocked(c)
-				return
-			}
-			c.Header("Cache-Control", "no-cache")
-			c.Data(http.StatusOK, "text/html; charset=utf-8", index)
+		if indexErr != nil {
+			blocked(c)
 			return
 		}
-		blocked(c)
+		if file, found := lookup(dir, relative); found {
+			c.File(file)
+			return
+		}
+		// 静态资源缺失时不要回退到 SPA 页面，避免 404 变成 200
+		if isStaticAsset(relative) {
+			blocked(c)
+			return
+		}
+		// index.html 每次读取：构建产物更新后无需重启服务
+		page, err := renderIndex(indexPath, prefix)
+		if err != nil {
+			global.LOGGER.Error("渲染 index.html 失败", "error", err)
+			blocked(c)
+			return
+		}
+		c.Header("Cache-Control", "no-cache")
+		c.Data(http.StatusOK, "text/html; charset=utf-8", page)
 	})
 }
 
-// buildIndex 读取 index.html 并注入 <base href>，使前端产物的相对资源路径
-// 与前端路由基址跟当前安全入口一致（入口可变而无需重新构建）。
-func buildIndex(dir, prefix string) ([]byte, error) {
-	raw, err := os.ReadFile(filepath.Join(dir, "index.html"))
+// renderIndex 读取 index.html 并注入 <base href>，使前端产物的相对资源路径
+// 与前端路由挂载点和当前安全入口一致（入口可变而无需重新构建）。
+func renderIndex(path, prefix string) ([]byte, error) {
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("读取 index.html 失败：%w", err)
 	}

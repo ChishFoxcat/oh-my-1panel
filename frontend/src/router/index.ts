@@ -1,18 +1,24 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { appBase } from '@/lib/app-base'
+import { routeMount } from '@/lib/app-base'
 import { useSystemStore } from '@/stores/system'
 
+// 安全入口由路由路径承载（见 lib/app-base 的 routeMount），history 基址必须是空串：
+// vue-router 在基址为"位于 base 根"时会把地址补成 base + '/'，而 createWebHistory()
+// 不传参时还会自动读取注入的 <base href>，把 /chish 又变回 /chish/。
+// 显式传 '/' 可避免读取 <base>，规范化后得到空基址，地址栏保持原样。
+const home = routeMount() || '/'
+
 const router = createRouter({
-  history: createWebHistory(appBase()),
+  history: createWebHistory('/'),
   routes: [
     {
-      path: '/',
+      path: home,
       name: 'home',
       component: () => import('@/views/home/index.vue'),
     },
     {
       path: '/:pathMatch(.*)*',
-      redirect: '/',
+      redirect: home,
     },
   ],
 })

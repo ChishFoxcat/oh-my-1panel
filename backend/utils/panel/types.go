@@ -48,16 +48,16 @@ type UserLoginInfo struct {
 
 // CurrentUserInfo 对应 1Panel dto.CurrentUserInfo（GET /api/v2/core/auth/current）。
 type CurrentUserInfo struct {
-	Name              string                `json:"name"`
-	Role              string                `json:"role"`
-	MfaStatus         string                `json:"mfaStatus"`
-	MfaInterval       int                   `json:"mfaInterval"`
-	AuthSource        string                `json:"authSource"`
-	AuthSourceStatus  string                `json:"authSourceStatus"`
-	ComplexitySetting string                `json:"complexitySetting"`
-	ApiInterfaceStatus string               `json:"apiInterfaceStatus"`
-	Permissions       []string              `json:"permissions"`
-	NodeRoles         []CurrentUserNodeRole `json:"nodeRoles"`
+	Name               string                `json:"name"`
+	Role               string                `json:"role"`
+	MfaStatus          string                `json:"mfaStatus"`
+	MfaInterval        int                   `json:"mfaInterval"`
+	AuthSource         string                `json:"authSource"`
+	AuthSourceStatus   string                `json:"authSourceStatus"`
+	ComplexitySetting  string                `json:"complexitySetting"`
+	ApiInterfaceStatus string                `json:"apiInterfaceStatus"`
+	Permissions        []string              `json:"permissions"`
+	NodeRoles          []CurrentUserNodeRole `json:"nodeRoles"`
 }
 
 // CurrentUserNodeRole 对应 1Panel dto.CurrentUserNodeRole。
