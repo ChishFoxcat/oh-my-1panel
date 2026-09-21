@@ -8,10 +8,14 @@ import (
 	"github.com/ChishFoxcat/oh-my-1panel/backend/app/api/v1"
 	"github.com/ChishFoxcat/oh-my-1panel/backend/cmd/server/web"
 	"github.com/ChishFoxcat/oh-my-1panel/backend/constant"
+	"github.com/ChishFoxcat/oh-my-1panel/backend/global"
 	"github.com/ChishFoxcat/oh-my-1panel/backend/middleware"
 )
 
 // InitRouter 组装 HTTP 路由。
+//
+// 启用安全入口（OMOP_ENTRANCE）时，接口、Swagger 与前端产物统一挂在 /{入口} 之下，
+// 入口以外的请求由 web.Register 注册的 NoRoute 拦掉。
 func InitRouter() *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
@@ -20,7 +24,9 @@ func InitRouter() *gin.Engine {
 	engine.Use(middleware.SessionLoader())
 	engine.Use(middleware.CSRFTokenGuard())
 
-	api := engine.Group(constant.APIPrefix)
+	prefix := global.CONF.WebPrefix()
+
+	api := engine.Group(prefix + constant.APIPrefix)
 	system := api.Group("/system")
 	{
 		system.GET("/info", v1.SystemInfo)
@@ -35,7 +41,7 @@ func InitRouter() *gin.Engine {
 		auth.POST("/logout", middleware.RequireSession(), v1.Logout)
 	}
 
-	engine.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-	web.Register(engine)
+	engine.GET(prefix+"/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	web.Register(engine, prefix)
 	return engine
 }

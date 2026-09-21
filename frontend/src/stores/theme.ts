@@ -3,7 +3,7 @@ import { ref } from 'vue'
 
 type Theme = 'light' | 'dark'
 
-const STORAGE_KEY = 'omp-theme'
+const STORAGE_KEY = 'omop-theme'
 
 /** 主题：默认跟随面板设置，用户在界面上手选后以本地选择为准。 */
 export const useThemeStore = defineStore('theme', () => {

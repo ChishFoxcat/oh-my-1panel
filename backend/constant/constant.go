@@ -2,13 +2,13 @@ package constant
 
 const (
 	// SessionName 浏览器会话 Cookie 名称（HttpOnly）
-	SessionName = "ompsession"
+	SessionName = "omopsession"
 	// CSRFTokenName 浏览器可读的 CSRF Cookie 名称
-	CSRFTokenName = "ompcsrftoken"
+	CSRFTokenName = "omopcsrftoken"
 	// CSRFHeaderName 非安全方法必须携带的 CSRF 头
 	CSRFHeaderName = "X-CSRF-Token"
 	// SessionContextKey 会话在 gin 上下文中的键
-	SessionContextKey = "OMP_SESSION"
+	SessionContextKey = "OMOP_SESSION"
 
 	// APIPrefix 本服务对外接口前缀
 	APIPrefix = "/api/v1"

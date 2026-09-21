@@ -1,6 +1,7 @@
 package web
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -12,40 +13,106 @@ import (
 	"github.com/ChishFoxcat/oh-my-1panel/backend/global"
 )
 
-// Register 托管前端构建产物，并为单页应用提供 history 回退。
-func Register(engine *gin.Engine) {
+// Register 托管前端构建产物。
+//
+// prefix 是安全入口路径前缀（如 /chish，未启用入口时为空串）：
+//   - 入口路径内：按文件系统提供静态资源，未命中文件时回退到注入 <base> 的 index.html；
+//   - 入口路径外：一律返回中性 404，不暴露本服务的存在与形态。
+func Register(engine *gin.Engine, prefix string) {
 	dir := global.CONF.WebDir
-	indexFile := filepath.Join(dir, "index.html")
-	if _, err := os.Stat(indexFile); err != nil {
-		global.LOGGER.Warn("未找到前端产物，仅提供接口与文档服务", "dir", dir, "hint", "在 frontend 目录执行 npm run build，或用 OMP_WEB_DIR 指定产物目录")
-		engine.NoRoute(apiNotFound)
-		return
+	// 中间件必须先于静态路由注册，否则不会进入该路由的处理链
+	engine.Use(cacheControl("/assets/", "public, max-age=2628000, immutable"))
+	if info, err := os.Stat(filepath.Join(dir, "assets")); err == nil && info.IsDir() {
+		engine.Static(prefix+"/assets", filepath.Join(dir, "assets"))
 	}
-	global.LOGGER.Info("已托管前端产物", "dir", dir)
 
-	assets := filepath.Join(dir, "assets")
-	if info, err := os.Stat(assets); err == nil && info.IsDir() {
-		engine.Use(cacheControl("/assets", "public, max-age=2628000, immutable"))
-		engine.Static("/assets", assets)
+	index, err := buildIndex(dir, prefix)
+	if err != nil {
+		global.LOGGER.Warn("未找到前端产物，仅提供接口与文档服务",
+			"dir", dir, "hint", "在 frontend 目录执行 npm run build，或用 OMOP_WEB_DIR 指定产物目录")
 	}
+	global.LOGGER.Info("前端产物托管", "dir", dir, "entrance", prefix, "mounted", err == nil)
 
 	engine.NoRoute(func(c *gin.Context) {
-		path := c.Request.URL.Path
-		if isReserved(path) {
+		relative, inside := relativePath(c.Request.URL.Path, prefix)
+		if !inside {
+			blocked(c)
+			return
+		}
+		if isReservedPath(relative) {
 			apiNotFound(c)
 			return
 		}
-		if file, ok := lookup(dir, path); ok {
-			c.File(file)
+		if index != nil {
+			if file, found := lookup(dir, relative); found {
+				c.File(file)
+				return
+			}
+			// 静态资源缺失时不要回退到 SPA 页面，避免 404 变成 200
+			if isStaticAsset(relative) {
+				blocked(c)
+				return
+			}
+			c.Header("Cache-Control", "no-cache")
+			c.Data(http.StatusOK, "text/html; charset=utf-8", index)
 			return
 		}
-		c.Header("Cache-Control", "no-cache")
-		c.File(indexFile)
+		blocked(c)
 	})
 }
 
-func lookup(dir, path string) (string, bool) {
-	clean := filepath.Clean(strings.TrimPrefix(path, "/"))
+// buildIndex 读取 index.html 并注入 <base href>，使前端产物的相对资源路径
+// 与前端路由基址跟当前安全入口一致（入口可变而无需重新构建）。
+func buildIndex(dir, prefix string) ([]byte, error) {
+	raw, err := os.ReadFile(filepath.Join(dir, "index.html"))
+	if err != nil {
+		return nil, fmt.Errorf("读取 index.html 失败：%w", err)
+	}
+	content := string(raw)
+	const head = "<head>"
+	if at := strings.Index(strings.ToLower(content), head); at >= 0 {
+		insertAt := at + len(head)
+		tag := fmt.Sprintf("\n    <base href=\"%s/\">", prefix)
+		content = content[:insertAt] + tag + content[insertAt:]
+	}
+	return []byte(content), nil
+}
+
+// relativePath 判断请求路径是否位于入口内，并返回去掉入口前缀的相对路径。
+func relativePath(path, prefix string) (string, bool) {
+	if prefix == "" {
+		return path, true
+	}
+	if path == prefix {
+		return "/", true
+	}
+	if strings.HasPrefix(path, prefix+"/") {
+		return strings.TrimPrefix(path, prefix), true
+	}
+	return "", false
+}
+
+func isReservedPath(relative string) bool {
+	return relative == constant.APIPrefix ||
+		strings.HasPrefix(relative, constant.APIPrefix+"/") ||
+		strings.HasPrefix(relative, "/swagger")
+}
+
+// staticExtensions 参与静态资源判定的扩展名，用于把"文件缺失"与"前端路由"区分开。
+var staticExtensions = map[string]bool{
+	".js": true, ".mjs": true, ".css": true, ".map": true, ".json": true, ".txt": true,
+	".ico": true, ".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".svg": true,
+	".webp": true, ".woff": true, ".woff2": true, ".ttf": true, ".wasm": true,
+}
+
+func isStaticAsset(relative string) bool {
+	return strings.HasPrefix(relative, "/assets/") ||
+		staticExtensions[strings.ToLower(filepath.Ext(relative))]
+}
+
+// lookup 在产物目录内定位真实文件，拒绝越出目录的路径。
+func lookup(dir, relative string) (string, bool) {
+	clean := filepath.Clean(strings.TrimPrefix(relative, "/"))
 	if clean == "." || strings.HasPrefix(clean, "..") || strings.Contains(clean, ".."+string(filepath.Separator)) {
 		return "", false
 	}
@@ -56,17 +123,18 @@ func lookup(dir, path string) (string, bool) {
 	return "", false
 }
 
-func isReserved(path string) bool {
-	return strings.HasPrefix(path, constant.APIPrefix+"/") || strings.HasPrefix(path, "/swagger")
-}
-
-func cacheControl(prefix, value string) gin.HandlerFunc {
+func cacheControl(fragment, value string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if strings.HasPrefix(c.Request.URL.Path, prefix) {
+		if strings.Contains(c.Request.URL.Path, fragment) {
 			c.Header("Cache-Control", value)
 		}
 		c.Next()
 	}
+}
+
+// blocked 对入口外的请求返回中性 404，不泄露任何服务特征。
+func blocked(c *gin.Context) {
+	http.NotFound(c.Writer, c.Request)
 }
 
 func apiNotFound(c *gin.Context) {

@@ -22,6 +22,7 @@ import (
 // @description 1Panel 新版 WebUI 的后端服务（BFF）。浏览器只与本服务通信，由服务端持有面板凭据、
 // @description 加密登录密码、维护会话并按需聚合转发 1Panel 接口。
 // @description 统一响应信封为 {"code": <HTTP 状态码>, "message": "", "data": {}}。
+// @description 启用安全入口（OMOP_ENTRANCE）时，实际请求路径为 /{入口}/api/v1/...。
 // @BasePath /api/v1
 // @schemes http https
 func main() {

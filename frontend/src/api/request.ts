@@ -1,9 +1,10 @@
 import type { AxiosRequestConfig } from 'axios'
 import type { Envelope } from './types'
 import axios from 'axios'
+import { appBase } from '@/lib/app-base'
 
 /** 后端会话 Cookie 名与 CSRF 头，需与 backend/constant 保持一致。 */
-const CSRF_COOKIE = 'ompcsrftoken'
+const CSRF_COOKIE = 'omopcsrftoken'
 const CSRF_HEADER = 'X-CSRF-Token'
 
 /** ApiError 携带 HTTP 状态码与面板错误键，便于页面做分支处理。 */
@@ -20,7 +21,7 @@ export class ApiError extends Error {
 }
 
 const http = axios.create({
-  baseURL: '/api/v1',
+  baseURL: `${appBase()}api/v1`,
   timeout: 30000,
 })
 
