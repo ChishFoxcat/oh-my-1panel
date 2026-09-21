@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { CaptchaResponse } from '@/api/types'
+import type { CaptchaResponse, LoginResponse } from '@/api/types'
 import { ArrowLeftIcon, EyeIcon, EyeOffIcon, KeyRoundIcon, MoonIcon, SunIcon, UserIcon } from '@lucide/vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -113,7 +113,7 @@ async function submitPassword() {
       step.value = 'mfa'
       return
     }
-    await finishLogin()
+    await finishLogin(result)
   }
   catch (thrown) {
     await handleFailure(thrown)
@@ -130,8 +130,8 @@ async function submitMFA() {
   submitting.value = true
   errorMessage.value = ''
   try {
-    await loginWithMFA({ sessionId: mfa.sessionId, code: mfa.code })
-    await finishLogin()
+    const result = await loginWithMFA({ sessionId: mfa.sessionId, code: mfa.code })
+    await finishLogin(result)
   }
   catch (thrown) {
     if (thrown instanceof ApiError && thrown.detail === 'ErrMFA') {
@@ -144,9 +144,11 @@ async function submitMFA() {
   }
 }
 
-async function finishLogin() {
+async function finishLogin(result: LoginResponse) {
   form.password = ''
   mfa.code = ''
+  // 先刷新登录态，否则路由守卫会把跳转弹回登录页
+  await system.markLoggedIn(result)
   toast.success('登录成功')
   await router.replace(redirectTo.value)
 }
