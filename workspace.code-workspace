@@ -1,0 +1,49 @@
+{
+  "folders": [
+    {
+      "path": ".",
+    },
+  ],
+  "settings": {
+    "fileheader.configObj": {
+      "language": {
+        "vue": {
+          "head": "<!--",
+          "middle": " ",
+          "end": "-->",
+        },
+        "html": {
+          "head": "<!--",
+          "middle": " ",
+          "end": "-->",
+        },
+        "css": {
+          "head": "/**",
+          "middle": " * ",
+          "end": " **/",
+        },
+        "ts": {
+          "head": "/**",
+          "middle": " * ",
+          "end": " **/",
+        },
+        "js": {
+          "head": "/**",
+          "middle": " * ",
+          "end": " **/",
+        },
+        "go": {
+          "head": "/**",
+          "middle": " * ",
+          "end": " **/",
+        }
+      },
+    },
+    "fileheader.customMade": {
+      "custom_string_obkoro1_copyright": "Copyright (c) 2026-${now_year}, Chish. All rights reserved.",
+      "Date": "",
+      "LastEditTime": "Do not edit",
+      "FilePath": "no item name",
+    },
+  },
+}
